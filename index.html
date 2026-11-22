@@ -214,6 +214,7 @@ select{font:500 .95rem var(--body);min-height:44px;padding:0 12px;border-radius:
         <label><input type="radio" name="input" value="screen"><span>Bildschirm-Klaviatur</span></label>
       </div>
       <p class="inputstatus" id="inputStatus"></p>
+      <p class="inputstatus" id="midiMon"></p>
     </fieldset>
 
     <label class="check"><input type="checkbox" id="bass"> Bei jedem Akkordwechsel den Grundton als Bass vorspielen (D – G – C)</label>
@@ -687,15 +688,34 @@ const SONGS = {
   }
   function onNoteOff(n){ S.heldMidi.delete(n); S.ignore.delete(n); renderKeys(); }
   function onMidiMsg(ev){
+    const d = ev && ev.data;
+    if (!d || d.length < 2) return;
+    const st = d[0] & 0xF0, n = d[1], v = d.length > 2 ? d[2] : 0;
+    if (st >= 0xF0) return;                                   // Clock, Active Sensing usw. ignorieren
+    // Diagnose: zeigt jede ankommende Nachricht, auch wenn die Übung nicht läuft
+    const mon = $('midiMon');
+    if (mon && S.input === 'midi') {
+      const kind = st === 0x90 ? (v > 0 ? 'Note an' : 'Note aus') : st === 0x80 ? 'Note aus' : 'Sonstiges (' + st.toString(16) + ')';
+      mon.textContent = 'Letzte MIDI-Nachricht: ' + kind + ' ' + NAMES[mod12(n)] + ' (' + n + '), Kanal ' + ((d[0] & 0x0F) + 1);
+    }
     if (S.input !== 'midi') return;
-    const st = ev.data[0] & 0xF0, n = ev.data[1], v = ev.data[2];
     if (st === 0x90 && v > 0) onNoteOn(n);
     else if (st === 0x80 || (st === 0x90 && v === 0)) onNoteOff(n);
   }
   function bindMidi(){
     const acc = S.midiAccess, names = [];
-    for (const inp of acc.inputs.values()) { inp.onmidimessage = onMidiMsg; names.push(inp.name); }
-    $('inputStatus').textContent = names.length ? 'MIDI verbunden: ' + names.join(', ') : 'Kein MIDI-Gerät gefunden. Keyboard per USB verbinden und die Seite neu laden.';
+    // Doppelt registrieren (onmidimessage und addEventListener): manche Browser, z. B. Web MIDI Browser auf iOS,
+    // liefern nur über einen der beiden Wege. Doppelte Events schaden nicht, Note an/aus sind idempotent.
+    const each = f => { if (acc.inputs.forEach) acc.inputs.forEach(f); else for (const i of acc.inputs.values()) f(i); };
+    each(inp => {
+      try { const p = inp.open && inp.open(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      try { inp.onmidimessage = onMidiMsg; } catch (e) {}
+      try { inp.removeEventListener('midimessage', onMidiMsg); inp.addEventListener('midimessage', onMidiMsg); } catch (e) {}
+      names.push(inp.name || 'Eingang');
+    });
+    $('inputStatus').textContent = names.length ? 'MIDI verbunden: ' + names.join(', ') : 'Kein MIDI-Gerät gefunden. Keyboard verbinden und die Seite neu laden.';
+    const mon = $('midiMon');
+    if (mon && !mon.textContent) mon.textContent = 'Noch keine MIDI-Nachricht empfangen. Drücke eine Taste.';
   }
   async function startMidi(){
     if (S.midiAccess) { bindMidi(); return; }
@@ -704,7 +724,7 @@ const SONGS = {
       return;
     }
     try {
-      S.midiAccess = await navigator.requestMIDIAccess();
+      S.midiAccess = await navigator.requestMIDIAccess({ sysex:false });
       S.midiAccess.onstatechange = bindMidi;
       bindMidi();
     } catch (e) {
@@ -768,6 +788,7 @@ const SONGS = {
   async function activateInput(){
     buildKeys();
     if (S.input !== 'mic') stopMic();
+    $('midiMon').textContent = '';
     if (S.input === 'midi') { $('inputStatus').textContent = ''; await startMidi(); }
     else if (S.input === 'mic') await startMic();
     else $('inputStatus').textContent = 'Tippe die Töne des Akkords nacheinander an (Arpeggio). Eine getippte Taste nimmst du durch erneutes Antippen zurück. Geprüft wird, wenn der Timer abläuft oder du Prüfen drückst. Mit Tiefer und Höher verschiebst du die Oktaven.';
