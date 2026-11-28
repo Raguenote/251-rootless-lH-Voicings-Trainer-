@@ -109,7 +109,7 @@ select{font:500 .95rem var(--body);min-height:44px;padding:0 12px;border-radius:
 <main>
   <header>
     <h1>251 Voicing Trainer</h1>
-    <p class="sub">Linke Hand: ii–V–I in allen Tonarten oder die Akkorde eines Songs. Die App spielt den Bass, du spielst das Voicing.</p>
+    <p class="sub">Linke Hand: ii–V–I in allen Tonarten, Kadenzen (auch mit Septakkorden) oder die Akkorde eines Songs. Die App spielt den Bass, du spielst das Voicing.</p>
   </header>
 
   <section class="stage" aria-label="Übung">
@@ -149,8 +149,30 @@ select{font:500 .95rem var(--body);min-height:44px;padding:0 12px;border-radius:
       <legend class="label">Übung</legend>
       <div class="seg" id="segMode">
         <label><input type="radio" name="mode" value="drill"><span>ii–V–I in allen Tonarten</span></label>
+        <label><input type="radio" name="mode" value="cad"><span>Kadenzen in allen Tonarten</span></label>
         <label><input type="radio" name="mode" value="song"><span>Song</span></label>
       </div>
+    </fieldset>
+
+    <fieldset id="fsCad" hidden>
+      <legend class="label"><label for="cad">Kadenz</label></legend>
+      <select id="cad">
+        <optgroup label="Vollständige Kadenz Dur (T – S – D – T)">
+          <option value="full3">Dreiklänge: I – IV – V – I</option>
+          <option value="full37">Mit Dominantseptakkord: I – IV – V7 – I</option>
+          <option value="full7">Septakkorde: Imaj7 – IVmaj7 – V7 – Imaj7</option>
+        </optgroup>
+        <optgroup label="Vollständige Kadenz Moll (t – s – D – t)">
+          <option value="full3m">Dreiklänge: i – iv – V – i</option>
+          <option value="full37m">Mit Dominantseptakkord: i – iv – V7 – i</option>
+          <option value="full7m">Septakkorde: i6 – iv7 – V7♭9 – i6</option>
+        </optgroup>
+        <optgroup label="Septakkord-Kadenzen">
+          <option value="iiVm">Moll: iiø7 – V7♭9 – i6</option>
+          <option value="turn">Dur mit Turnaround: Imaj7 – vi7 – ii7 – V7 – Imaj7</option>
+        </optgroup>
+      </select>
+      <p class="note" style="margin-top:10px">Tonika – Subdominante – Dominante – Tonika. Die Lage der Akkorde (Grundstellung, Umkehrungen, Voicings) wählt die App so, dass die Stimmen möglichst nah beieinander bleiben. Grundton-Reihenfolge und Starttonart stellst du wie bei ii–V–I ein.</p>
     </fieldset>
 
     <fieldset id="fsSong" hidden>
@@ -343,7 +365,14 @@ const QUALS = {
   'maj7': { t:{3:4,5:7,7:11,9:2},          A:[3,5,7,9],  B:[7,9,3,5],  L:{} },
   'm7b5': { t:{3:3,5:6,7:10,9:2},          A:[3,5,7,9],  B:[7,9,3,5],  L:{3:'♭3',5:'♭5',7:'♭7'} },
   'm':    { t:{3:3,5:7,6:9,9:2},           A:[3,5,6,9],  B:[6,9,3,5],  L:{3:'♭3'} },
-  'dim7': { t:{3:3,5:6,7:9,9:2},           A:[3,5,7,9],  B:[7,9,3,5],  L:{3:'♭3',5:'♭5',7:'♭♭7'} }
+  'dim7': { t:{3:3,5:6,7:9,9:2},           A:[3,5,7,9],  B:[7,9,3,5],  L:{3:'♭3',5:'♭5',7:'♭♭7'} },
+  // klassische Kadenz-Akkorde (mit Grundton) und ihre Umkehrungen
+  'tri':   { t:{1:0,3:4,5:7},       A:[1,3,5], B:[3,5,1], C:[5,1,3], L:{},
+             FN:{A:'Grundstellung',B:'1. Umkehrung',C:'2. Umkehrung'} },
+  'mtri':  { t:{1:0,3:3,5:7},       A:[1,3,5], B:[3,5,1], C:[5,1,3], L:{3:'♭3'},
+             FN:{A:'Grundstellung',B:'1. Umkehrung',C:'2. Umkehrung'} },
+  'dom7c': { t:{1:0,3:4,5:7,7:10},  A:[1,3,5,7], B:[3,5,7,1], C:[5,7,1,3], D:[7,1,3,5], L:{7:'♭7'},
+             FN:{A:'Grundstellung',B:'Quintsextakkord',C:'Terzquartakkord',D:'Sekundakkord'} }
 };
 const SUFFIX_QUAL = {
   '':'maj7','maj7':'maj7','M7':'maj7','maj9':'maj7','6':'maj7','69':'maj7','maj':'maj7',
@@ -369,7 +398,7 @@ function parseSong(text){
 }
 function buildSongChord(rootPc, qual, prevMean){
   const q = QUALS[qual]; let best = null;
-  ['A','B'].forEach(form => {
+  ['A','B','C','D'].filter(f => q[f]).forEach(form => {
     const degs = q[form], pcs = degs.map(d => mod12(rootPc + q.t[d]));
     const base0 = 47 + mod12(pcs[0] - 47);
     [-12, 0, 12].forEach(sh => {
@@ -381,7 +410,28 @@ function buildSongChord(rootPc, qual, prevMean){
     });
   });
   const degByPc = {}; best.degs.forEach((d, i) => { degByPc[best.pcs[i]] = d; });
-  return { name:'', rootPc, degs:best.degs, pcs:best.pcs, midi:best.midi, degByPc, lab:q.L, form:best.form };
+  return { name:'', rootPc, degs:best.degs, pcs:best.pcs, midi:best.midi, degByPc, lab:q.L, form:best.form,
+           formName: q.FN ? q.FN[best.form] : (best.form === 'A' ? 'A-Form' : 'B-Form') };
+}
+// Kadenzen: Schritte als [Abstand zum Grundton der Tonart, Qualität, Namensendung, Stufe]
+const CADENCES = {
+  full3:   { label:'Vollständige Kadenz Dur, Dreiklänge', steps:[[0,'tri','','I'],[5,'tri','','IV'],[7,'tri','','V'],[0,'tri','','I']] },
+  full37:  { label:'Vollständige Kadenz Dur mit V7',      steps:[[0,'tri','','I'],[5,'tri','','IV'],[7,'dom7c','7','V7'],[0,'tri','','I']] },
+  full7:   { label:'Vollständige Kadenz Dur, Septakkorde', steps:[[0,'maj7','maj7','I'],[5,'maj7','maj7','IV'],[7,'7','7','V7'],[0,'maj7','maj7','I']] },
+  full3m:  { label:'Vollständige Kadenz Moll, Dreiklänge', steps:[[0,'mtri','m','i'],[5,'mtri','m','iv'],[7,'tri','','V'],[0,'mtri','m','i']] },
+  full37m: { label:'Vollständige Kadenz Moll mit V7',      steps:[[0,'mtri','m','i'],[5,'mtri','m','iv'],[7,'dom7c','7','V7'],[0,'mtri','m','i']] },
+  full7m:  { label:'Vollständige Kadenz Moll, Septakkorde', steps:[[0,'m','m6','i6'],[5,'m7','m7','iv7'],[7,'7b9','7b9','V7♭9'],[0,'m','m6','i6']] },
+  iiVm:    { label:'Septakkord-Kadenz Moll',               steps:[[2,'m7b5','m7b5','iiø7'],[7,'7b9','7b9','V7♭9'],[0,'m','m6','i6']] },
+  turn:    { label:'Septakkord-Kadenz Dur mit Turnaround', steps:[[0,'maj7','maj7','I'],[9,'m7','m7','vi7'],[2,'m7','m7','ii7'],[7,'7','7','V7'],[0,'maj7','maj7','I']] }
+};
+function buildCadence(key, id, prevMean){
+  const out = []; let pm = prevMean;
+  CADENCES[id].steps.forEach(s => {
+    const root = mod12(key + s[0]), c = buildSongChord(root, s[1], pm);
+    c.name = NAMES[root] + s[2]; c.step = s[3]; out.push(c);
+    pm = c.midi.reduce((a, b) => a + b, 0) / c.midi.length;
+  });
+  return out;
 }
 const SONGS = {
   autumn: { label:'Autumn Leaves (g-Moll)', key:7, text:'Cm7 F7 Bbmaj7 Ebmaj7 Am7b5 D7b9 Gm | Am7b5 D7b9 Gm Cm7 F7 Bbmaj7 Am7b5 D7b9 Gm7 F#7 Fm7 E7 Ebmaj7 D7b9 Gm' },
@@ -393,7 +443,7 @@ const SONGS = {
   if (typeof document === 'undefined') return;
   const $ = id => document.getElementById(id);
   const S = {
-    mode:'drill', song:'autumn', trans:0, customText:'Dm7 G7 Cmaj7 | Em7 A7 Dmaj7', pos:0, sc:[], cur:null, last:null, prevMean:58, running:false, key:0, idx:0, order:'chrom', voicing:'bookA', input:'screen', help:false,
+    mode:'drill', cad:'full37', cadList:[], song:'autumn', trans:0, customText:'Dm7 G7 Cmaj7 | Em7 A7 Dmaj7', pos:0, sc:[], cur:null, last:null, prevMean:58, running:false, key:0, idx:0, order:'chrom', voicing:'bookA', input:'screen', help:false,
     fails:0, failTotal:0, done:0, locked:false, bag:[],
     heldMidi:new Set(), ignore:new Set(), group:new Set(), tapped:[], prevKeys:new Set(), shownMidi:[], base:48, tapTm:null, shown:new Set(),
     bass:true, rootEach:true, timerOn:true, tmLeft:5, tmInt:null, startKey:'rand', status:'idle', tm:null, blockUntil:0, ctx:null, mic:null, midiAccess:null
@@ -403,11 +453,11 @@ const SONGS = {
     const saved = JSON.parse(localStorage.getItem('251trainer') || '{}');
     ['order','voicing'].forEach(k => { if (saved[k]) S[k] = saved[k]; });
     if (saved.inputV2) S.input = saved.inputV2;
-    S.help = !!saved.help; S.bass = saved.bassAuto !== false; S.rootEach = saved.rootEach !== false; if (saved.startKey) S.startKey = saved.startKey; S.timerOn = saved.timerOn !== false; if (saved.mode) S.mode = saved.mode; if (saved.song) S.song = saved.song; if (saved.trans != null) S.trans = +saved.trans; if (saved.customText) S.customText = saved.customText;
+    S.help = !!saved.help; S.bass = saved.bassAuto !== false; S.rootEach = saved.rootEach !== false; if (saved.startKey) S.startKey = saved.startKey; S.timerOn = saved.timerOn !== false; if (saved.mode) S.mode = saved.mode; if (saved.song) S.song = saved.song; if (saved.cad && CADENCES[saved.cad]) S.cad = saved.cad; if (saved.trans != null) S.trans = +saved.trans; if (saved.customText) S.customText = saved.customText;
   } catch(e){}
-  function save(){ try { localStorage.setItem('251trainer', JSON.stringify({order:S.order,voicing:S.voicing,inputV2:S.input,help:S.help,bassAuto:S.bass,rootEach:S.rootEach,startKey:S.startKey,timerOn:S.timerOn,mode:S.mode,song:S.song,trans:S.trans,customText:S.customText})); } catch(e){} }
+  function save(){ try { localStorage.setItem('251trainer', JSON.stringify({order:S.order,voicing:S.voicing,inputV2:S.input,help:S.help,bassAuto:S.bass,rootEach:S.rootEach,startKey:S.startKey,timerOn:S.timerOn,mode:S.mode,cad:S.cad,song:S.song,trans:S.trans,customText:S.customText})); } catch(e){} }
 
-  const target = () => S.mode === 'song' ? S.cur : buildChord(S.key, S.idx, S.voicing, false);
+  const target = () => S.mode === 'drill' ? buildChord(S.key, S.idx, S.voicing, false) : S.cur;
   const degStr = c => c.degs.map(d => (c.lab && c.lab[d]) || d).join('-');
   const meanOf = c => c.midi.reduce((a, b) => a + b, 0) / c.midi.length;
   const chordName = e => (S.trans === 0 ? e.rn : NAMES[mod12(e.root + S.trans)]) + e.suf;
@@ -418,6 +468,7 @@ const SONGS = {
   function songSource(){ return S.song === 'custom' ? S.customText : SONGS[S.song].text; }
   function songKey(){ return S.song === 'custom' ? (S.sc[0] ? S.sc[0].root : 0) : SONGS[S.song].key; }
   const noteList = pcs => pcs.map(p => NAMES[p]).join(' ');
+  function buildCad(){ S.cadList = buildCadence(S.key, S.cad, S.prevMean); S.cur = S.cadList[Math.min(S.idx, S.cadList.length - 1)]; }
 
   // ---------- Audio ----------
   function getCtx(){
@@ -455,8 +506,8 @@ const SONGS = {
     setTimeout(() => { if (S.running && S.key === k && S.idx === i && S.pos === p && !S.locked) playChordRoot(); }, delay);
   }
   function playSolution(){
-    const c = S.mode === 'song' ? S.cur : buildChord(S.key, S.idx, S.voicing, S.bass);
-    const notes = S.mode === 'song' && S.bass ? [36 + c.rootPc].concat(c.midi) : c.midi;
+    const c = S.mode !== 'drill' ? S.cur : buildChord(S.key, S.idx, S.voicing, S.bass);
+    const notes = S.mode !== 'drill' && S.bass && c.degs.indexOf(1) < 0 ? [36 + c.rootPc].concat(c.midi) : c.midi;
     notes.forEach((m, i) => tone(m, i * 0.04, 1.8, 0.22));
     blockMic(2600);
   }
@@ -469,12 +520,19 @@ const SONGS = {
     const li = document.createElement('li');
     li.className = 'chord ' + cls;
     const a = document.createElement('span'); a.className = 'nm'; a.textContent = c ? c.name : '–';
-    const b = document.createElement('span'); b.className = 'dg'; b.textContent = c && c.degs ? degStr(c) : '';
+    const b = document.createElement('span'); b.className = 'dg'; b.textContent = c && c.degs ? (c.step ? c.step + ' · ' : '') + degStr(c) : '';
     const d = document.createElement('span'); d.className = 'nt'; d.textContent = c && c.pcs && S.help && showNotes ? noteList(c.pcs) : '';
     li.append(a, b, d); return li;
   }
   function renderChords(){
-    const ol = $('chords'); ol.textContent = '';
+    const ol = $('chords'); ol.textContent = ''; ol.style.gridTemplateColumns = '';
+    if (S.mode === 'cad') {
+      const L = S.running ? S.cadList : [];
+      if (!L.length) { for (let i = 0; i < 4; i++) ol.append(chordCard(null, 'pending')); return; }
+      ol.style.gridTemplateColumns = 'repeat(' + (L.length <= 4 ? L.length : 3) + ',minmax(0,1fr))';
+      L.forEach((c, i) => ol.append(chordCard(c, i < S.idx ? 'done' : i === S.idx ? (S.status === 'ok' ? 'done' : 'cur') : 'pending', true)));
+      return;
+    }
     if (S.mode === 'song') {
       if (!S.running || !S.cur) { ol.append(chordCard(null,'pending'), chordCard(null,'pending'), chordCard(null,'pending')); return; }
       const n = S.sc.length, np = (S.pos + 1) % n;
@@ -596,7 +654,8 @@ const SONGS = {
     $('rootName').textContent = !S.running ? '–' : song ? (S.cur ? S.cur.name : '–') : NAMES[S.key];
     $('rootName').classList.toggle('long', song);
     $('fsSong').hidden = !song; $('customWrap').hidden = !(song && S.song === 'custom');
-    $('fsOrder').hidden = song; $('fsStart').hidden = song; $('fsVoicing').hidden = song;
+    $('fsOrder').hidden = song; $('fsStart').hidden = song; $('fsVoicing').hidden = song || S.mode === 'cad';
+    $('fsCad').hidden = S.mode !== 'cad';
     $('doneCount').textContent = S.done;
     $('failTotal').textContent = S.failTotal;
     $('btnStart').textContent = S.running ? 'Stopp' : 'Start';
@@ -610,10 +669,10 @@ const SONGS = {
   // ---------- Ablauf ----------
   function announce(){
     const c = target();
-    setFeedback('Spiele ' + c.name + ' (' + (S.mode === 'song' ? (c.form === 'A' ? 'A-Form ' : 'B-Form ') + degStr(c) : VOICINGS[S.voicing].label) + ')' + (S.bass ? ' · Bass: ' + NAMES[c.rootPc] : ''));
+    setFeedback('Spiele ' + c.name + ' (' + (S.mode !== 'drill' ? c.formName + ' ' + degStr(c) : VOICINGS[S.voicing].label) + ')' + (S.bass ? ' · Bass: ' + NAMES[c.rootPc] : ''));
   }
   function newRoot(first){
-    S.idx = 0; S.fails = 0; S.status = 'idle'; S.locked = false; S.tapped = []; clearTimeout(S.tapTm); stopTimer(); S.shown = new Set(); S.shownMidi = [];
+    S.idx = 0; if (S.mode === 'cad') buildCad(); S.fails = 0; S.status = 'idle'; S.locked = false; S.tapped = []; clearTimeout(S.tapTm); stopTimer(); S.shown = new Set(); S.shownMidi = [];
     render();
     setFeedback('Neuer Grundton: ' + NAMES[S.key] + '. Spiele ' + target().name + '.');
     const d0 = first ? 100 : 300, withRoot = first || S.rootEach;
@@ -638,6 +697,16 @@ const SONGS = {
       render(); announce(); scheduleBass(250);
       return;
     }
+    if (S.mode === 'cad') {
+      if (S.idx < S.cadList.length - 1) { S.idx++; S.cur = S.cadList[S.idx]; S.locked = false; render(); announce(); scheduleBass(250); }
+      else {
+        if (credit) S.done++;
+        S.prevMean = meanOf(S.cur);
+        const n = nextRoot(S.order, S.key, S.bag); S.key = n.key; S.bag = n.bag;
+        newRoot(false);
+      }
+      return;
+    }
     if (S.idx < 2) {
       S.idx++; S.locked = false; render(); announce(); scheduleBass(250);
     } else {
@@ -659,7 +728,8 @@ const SONGS = {
       S.ignore = new Set(S.heldMidi); S.group.clear();
       setFeedback('Richtig: ' + c.name + ' (' + noteList(c.pcs) + ')', 'ok');
       render();
-      setTimeout(() => stepForward(true), S.idx === 2 ? 1100 : 800);
+      const lastC = S.mode === 'cad' ? S.idx === S.cadList.length - 1 : S.idx === 2;
+      setTimeout(() => stepForward(true), lastC ? 1100 : 800);
       return;
     }
     S.status = 'bad';
@@ -806,7 +876,7 @@ const SONGS = {
       if (!ps.chords.length) { setFeedback('Keine Akkorde erkannt. Prüfe die Akkordfolge.', 'bad'); return; }
       S.sc = ps.chords; S.pos = 0; S.last = null; S.prevMean = 58; S.cur = songChordAt(0, 58);
     }
-    S.running = true; S.done = 0; S.failTotal = 0; S.bag = []; S.prevKeys = new Set();
+    S.running = true; S.done = 0; S.failTotal = 0; S.bag = []; S.prevKeys = new Set(); S.prevMean = 58;
     S.key = S.startKey === 'rand' ? Math.floor(Math.random() * 12) : +S.startKey;
     await activateInput();
     if (S.mode === 'song') songStart(); else newRoot(true);
@@ -841,6 +911,11 @@ const SONGS = {
     S.mode = r.value; save(); setFeedback('Drücke Start.'); render();
   }));
   $('song').addEventListener('change', e => { S.song = e.target.value; save(); render(); });
+  $('cad').addEventListener('change', e => {
+    S.cad = e.target.value; save();
+    if (S.running) { S.running = false; S.locked = false; clearTimeout(S.tm); stopTimer(); S.tapped = []; setFeedback('Drücke Start.'); }
+    render();
+  });
   $('trans').addEventListener('change', e => { S.trans = +e.target.value; save(); });
   $('customText').addEventListener('input', e => { S.customText = e.target.value; save(); });
   $('startKey').addEventListener('change', e => { S.startKey = e.target.value; save(); });
@@ -856,7 +931,7 @@ const SONGS = {
   $('rootEach').checked = S.rootEach;
   $('startKey').value = S.startKey;
   document.querySelector('input[name="mode"][value="' + S.mode + '"]').checked = true;
-  $('song').value = S.song; $('trans').value = String(S.trans); $('customText').value = S.customText;
+  $('cad').value = S.cad; $('song').value = S.song; $('trans').value = String(S.trans); $('customText').value = S.customText;
   $('timerOn').checked = S.timerOn;
   buildKeys(); render();
   if (S.input === 'screen') $('inputStatus').textContent = 'Tippe die Töne des Akkords nacheinander an (Arpeggio). Eine getippte Taste nimmst du durch erneutes Antippen zurück. Geprüft wird, wenn der Timer abläuft oder du Prüfen drückst.';
